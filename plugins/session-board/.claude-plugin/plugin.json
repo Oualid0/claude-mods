@@ -1,0 +1,7 @@
+{
+  "name": "session-board",
+  "version": "1.0.0",
+  "description": "Shows the running Claude sessions on this machine above the prompt",
+  "author": { "name": "Oualid0" },
+  "types": "./types/index.d.ts"
+}

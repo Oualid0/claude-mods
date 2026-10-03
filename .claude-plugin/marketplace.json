@@ -1,0 +1,17 @@
+{
+  "name": "claude-mods",
+  "description": "Mods for the Claude Code terminal: usage rings and a session board above the prompt",
+  "owner": { "name": "Oualid0" },
+  "plugins": [
+    {
+      "name": "usage-ring",
+      "source": "./plugins/usage-ring",
+      "description": "Rings above the prompt for limits, context, todos, tokens, cost and the prompt cache"
+    },
+    {
+      "name": "session-board",
+      "source": "./plugins/session-board",
+      "description": "Shows the running Claude sessions on this machine above the prompt"
+    }
+  ]
+}

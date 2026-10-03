@@ -1,0 +1,17 @@
+{
+  "name": "usage-ring",
+  "version": "1.0.0",
+  "description": "Rings above the prompt for limits, context, todos, tokens, cost and the prompt cache",
+  "author": {
+    "name": "Oualid0"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "limitsFile": {
+      "type": "boolean",
+      "title": "Write usage-limits.json",
+      "description": "Keep the session and weekly limits in $CLAUDE_CONFIG_DIR/usage-limits.json (default ~/.claude) for other tools to read, and seed the rings from it when a session starts.",
+      "default": false
+    }
+  }
+}

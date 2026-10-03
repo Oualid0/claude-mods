@@ -1,0 +1,4 @@
+# Laid by Claude Code on every load; regenerated, never edited.
+plugins/*/.claude-plugin/types/
+plugins/*/tsconfig.json
+node_modules/
