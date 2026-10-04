@@ -1,6 +1,6 @@
 {
   "name": "usage-ring",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Rings above the prompt for limits, context, todos, tokens, cost and the prompt cache",
   "author": {
     "name": "Oualid0"

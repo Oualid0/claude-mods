@@ -64,7 +64,8 @@ test('session.measure fills the rings (time until reset without session.start) a
   })
 
   const ui = await $.ui.mount(BAND)
-  expect(await ui.find({ text: '48% 2:20h' })).toBeDefined()
+  expect(await ui.find({ text: '48%' })).toBeDefined()
+  expect(await ui.find({ text: '2:20h' })).toBeDefined()
   expect(await ui.find({ text: '40%' })).toBeDefined()
   expect(await ui.find({ text: '23%' })).toBeDefined()
   expect(await ui.find({ text: 'below' })).toBeDefined()

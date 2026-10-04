@@ -57,6 +57,7 @@ When the terminal is narrow, the least important goes first: the model label, th
 - Needs a Claude Code version with mods (function-hook plugins); tested with Claude Code 2.1.288.
   The mod API is early access and may change between versions.
 - Rings are pixel images in kitty and Ghostty; other terminals show a glyph instead.
+- Rings for the week, session and context turn red from 95%, and the cache time `Ca` turns red in its last 3 minutes.
 - `Ca` is an estimate. Claude Code does not tell plugins how long the cache lives (5 minutes
   or 1 hour), so the band assumes 1 hour and learns from what each request read from the
   cache: a hit after a pause of more than 5 minutes means 1 hour, a miss means 5 minutes.

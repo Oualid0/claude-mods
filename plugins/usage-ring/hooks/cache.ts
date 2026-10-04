@@ -5,6 +5,9 @@
 import type { Cache } from '../types'
 import { duration } from './model'
 
+/** The cache's time left is shown red from this point on. */
+export const WARN_MS = 3 * 60_000
+
 export const SHORT_TTL = 5 * 60_000
 export const LONG_TTL = 60 * 60_000
 
@@ -59,4 +62,10 @@ export function cacheLeft(cache: Cache, now: number): string | undefined {
   if (cache.lastAt === undefined) return undefined
   const ms = cache.lastAt + cache.ttl - now
   return ms > 0 ? duration(ms) : EXPIRED
+}
+
+/** True when the entry has less than 3 minutes left or has lapsed; false before the first request. */
+export function isCacheLow(cache: Cache, now: number): boolean {
+  if (cache.lastAt === undefined) return false
+  return cache.lastAt + cache.ttl - now <= WARN_MS
 }

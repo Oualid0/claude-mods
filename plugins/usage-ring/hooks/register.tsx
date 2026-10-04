@@ -2,12 +2,13 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Cache, Model, Todos, Usage } from '../types'
-import { FRESH_CACHE, afterRequest, cacheLeft } from './cache'
+import { FRESH_CACHE, afterRequest, cacheLeft, isCacheLow } from './cache'
 import { CLAUDE, SCALE, SPRITE, SPRITE_W, claudePixels, hammerPixels } from './claude'
 import {
   RING_COLUMNS,
   RING_ROWS,
   SPRITE_COLUMNS,
+  ALERT,
   GAP,
   LABELS,
   entries,
@@ -93,6 +94,24 @@ async function syncTodos($: EngineInterface): Promise<void> {
   }
 }
 
+/**
+ * The context fill: the last response's figure, or before the first response
+ * (a new chat, after /clear) the local estimate of what is already loaded
+ * (system prompt, tools, memory files). Undefined when neither is known.
+ */
+async function contextPercent(
+  $: EngineInterface,
+  context: { percent?: number },
+): Promise<number | undefined> {
+  if (context.percent !== undefined) return context.percent
+  try {
+    const { context: c } = await $.session.usage({ breakdown: 'summary' })
+    return c.breakdown?.percentage
+  } catch {
+    return undefined
+  }
+}
+
 const pictures = new Map<string, string>()
 
 /** The base64 picture for `key`, drawn once. */
@@ -117,7 +136,8 @@ export const register: Register = (on, options) => {
     await update($, now, () => startedAt)
     const sessionUsage = await $.session.usage()
     const { rateLimits, context } = sessionUsage
-    await update($, usage, u => usageFrom(rateLimits, context.percent, u))
+    const percent = await contextPercent($, context)
+    await update($, usage, u => usageFrom(rateLimits, percent, u))
     if (writesLimits && rateLimits.length === 0) await seedFromSnapshot($)
     await syncTodos($)
     try {
@@ -143,7 +163,8 @@ export const register: Register = (on, options) => {
       const usd = e.cost.usd
       await update($, costUsd, () => usd)
     }
-    await update($, usage, u => usageFrom(e.rateLimits, e.context.percent, u))
+    const percent = await contextPercent($, e.context)
+    await update($, usage, u => usageFrom(e.rateLimits, percent, u))
     if (writesLimits) {
       try {
         const written = snapshot(e.rateLimits, await $.clock.now(), await $.session.model())
@@ -245,10 +266,11 @@ export const register: Register = (on, options) => {
     const pose = SWING[f % SWING.length]!
     const isHit = busy && pose === HIT_POSE
 
+    const cacheIsLow = isCacheLow(c, await $.clock.now())
     const entry = (label: string, value: string) => (
       <Box key={label} flexDirection="row" gap={1}>
         <Text dimColor>{label}</Text>
-        <Text color={hot(CLAUDE)} bold>
+        <Text color={hot(label === 'Ca' && cacheIsLow ? ALERT : CLAUDE)} bold>
           {value}
         </Text>
       </Box>
@@ -275,8 +297,13 @@ export const register: Register = (on, options) => {
                   alt={ringGlyph(s.percent)}
                 />
                 <Text color={hot(s.color)} bold>
-                  {s.text}
+                  {s.time ? s.text.slice(0, -(s.time.length + 1)) : s.text}
                 </Text>
+                {s.time ? (
+                  <Text color={hot(CLAUDE)} bold>
+                    {s.time}
+                  </Text>
+                ) : null}
               </Box>
             ))}
             {withEntries && chatEntries.length > 0 ? (

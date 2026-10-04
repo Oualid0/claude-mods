@@ -1,9 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
-import { SHORT, SPRITE_COLUMNS, compact, duration, fit, widthOf, modelLabel, modelName, groups, money, remaining, segments, snapshot, withCreated, withUpdated } from '../hooks/model'
+import { ALERT, SHORT, SPRITE_COLUMNS, compact, duration, fit, widthOf, modelLabel, modelName, groups, money, remaining, segments, snapshot, withCreated, withUpdated } from '../hooks/model'
 import { SCALE, SPRITE, SPRITE_W, claudePixels, hammerPixels } from '../hooks/claude'
 import { RING_SIZE, ringPixels, toBase64 } from '../hooks/ring'
-import { EXPIRED, FRESH_CACHE, LONG_TTL, SHORT_TTL, afterRequest, cacheLeft } from '../hooks/cache'
+import { EXPIRED, FRESH_CACHE, LONG_TTL, SHORT_TTL, afterRequest, cacheLeft, isCacheLow } from '../hooks/cache'
 
 const NOW = Date.parse('2026-10-03T13:00:00Z')
 
@@ -198,3 +198,27 @@ test('the model label is the short model name with its effort', () => {
   expect(modelLabel(undefined, 'high')).toBeUndefined()
 })
 
+
+test('rings turn red from 95%, the todo ring never does', () => {
+  const list = segments({ weekUsed: 94, sessionUsed: 95, contextUsed: 99 }, { a: 'completed' }, NOW)
+  expect(list.map(s => [s.id, s.color === ALERT])).toEqual([
+    ['week', false],
+    ['session', true],
+    ['context', true],
+    ['todos', false],
+  ])
+})
+
+test('the cache turns red in its last 3 minutes and once lapsed', () => {
+  const c = { lastAt: 0, ttl: SHORT_TTL, source: 'assumed' as const }
+  expect(isCacheLow(c, SHORT_TTL - 3 * 60_000 - 1)).toBe(false)
+  expect(isCacheLow(c, SHORT_TTL - 3 * 60_000)).toBe(true)
+  expect(isCacheLow(c, SHORT_TTL + 1)).toBe(true)
+  expect(isCacheLow({ ttl: SHORT_TTL, source: 'assumed' }, 0)).toBe(false)
+})
+
+test('the session time stays out of the red', () => {
+  const [session] = segments({ sessionUsed: 96, sessionResetsAt: '2026-10-03T15:14:30Z' }, {}, NOW)
+  expect(session?.color).toBe(ALERT)
+  expect(session?.time).toBe('2:14h')
+})

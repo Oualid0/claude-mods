@@ -7,6 +7,14 @@ import type { TodoStatus, Todos, Usage } from '../types'
 /** Claude's terracotta: every ring, frame and label. */
 export const TERRACOTTA = '#d97757'
 
+/** A red that sits next to the terracotta: rings from 95% on and a cache about to lapse. */
+export const ALERT = '#e5484d'
+/** From this fill on a limit or context ring turns red. */
+export const ALERT_PERCENT = 95
+
+/** The color of a ring that shows a fill: red from 95%, otherwise `base`. */
+export const ringColor = (percent: number, base: string): string => (percent >= ALERT_PERCENT ? ALERT : base)
+
 export const COLORS = {
   session: TERRACOTTA,
   context: TERRACOTTA,
@@ -25,6 +33,8 @@ export type Segment = {
   /** How full the ring is drawn, 0..100. */
   percent: number
   text: string
+  /** The time part of `text` (`4:54h`); it keeps the base color when the ring turns red. */
+  time?: string
   color: string
 }
 
@@ -42,7 +52,7 @@ export function usageFrom(
     sessionUsed: session?.percentUsed ?? previous.sessionUsed,
     sessionResetsAt: session ? session.resetsAt : previous.sessionResetsAt,
     weekUsed: week?.percentUsed ?? previous.weekUsed,
-    contextUsed: contextPercent ?? previous.contextUsed,
+    contextUsed: contextPercent,
   }
 }
 
@@ -87,7 +97,7 @@ export function segments(usage: Usage, todos: Todos, now: number): Segment[] {
 
   if (usage.weekUsed !== undefined) {
     const used = round(usage.weekUsed)
-    out.push({ id: 'week', short: SHORT.week, percent: used, text: `${used}%`, color: COLORS.week })
+    out.push({ id: 'week', short: SHORT.week, percent: used, text: `${used}%`, color: ringColor(used, COLORS.week) })
   }
   if (usage.sessionUsed !== undefined) {
     // A window that ran out is empty and whole again until the next reading
@@ -100,12 +110,13 @@ export function segments(usage: Usage, todos: Todos, now: number): Segment[] {
       short: SHORT.session,
       percent: used,
       text: time ? `${used}% ${time}` : `${used}%`,
-      color: COLORS.session,
+      time,
+      color: ringColor(used, COLORS.session),
     })
   }
   if (usage.contextUsed !== undefined) {
     const used = round(usage.contextUsed)
-    out.push({ id: 'context', short: SHORT.context, percent: used, text: `${used}%`, color: COLORS.context })
+    out.push({ id: 'context', short: SHORT.context, percent: used, text: `${used}%`, color: ringColor(used, COLORS.context) })
   }
   const { done, total } = todoCounts(todos)
   if (total > 0) {
@@ -180,6 +191,9 @@ export function modelLabel(id: string | undefined, effort: string | number | und
   return `${name} (${typeof effort === 'number' ? effort : (EFFORT_SHORT[effort] ?? effort)})`
 }
 
+/** Shown for the cache before the first request: nothing is cached yet. */
+export const CACHE_NONE = '–'
+
 /** What the chat chip shows besides its rings: tokens, cost and the cache's time left. */
 export type Extras = { tokens: number; costUsd: number; cache?: string; model?: string }
 
@@ -207,7 +221,7 @@ export function entries(extras: Extras, shown: Shown): [string, string][] {
   const out: [string, string][] = []
   if (shown.hasTokens) out.push(['Tk', compact(extras.tokens)])
   if (shown.hasCost) out.push(['Co', money(extras.costUsd)])
-  if (shown.hasCache && extras.cache !== undefined) out.push(['Ca', extras.cache])
+  if (shown.hasCache) out.push(['Ca', extras.cache ?? CACHE_NONE])
   return out
 }
 
