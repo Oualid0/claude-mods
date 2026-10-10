@@ -36,10 +36,9 @@ function turnOf(x: number, y: number): number {
 
 /**
  * The ring for `percent` (clamped to 0..100) as `RING_SIZE * RING_SIZE` RGBA
- * pixels, edges antialiased by supersampling. A `scale` below 1 draws a smaller
- * ring with empty room around it.
+ * pixels, edges antialiased by supersampling.
  */
-export function ringPixels(percent: number, rgb: Rgb, scale = 1): Uint8Array {
+export function ringPixels(percent: number, rgb: Rgb): Uint8Array {
   const fill = Math.min(100, Math.max(0, percent)) / 100
   const n = RING_SIZE
   const lit = new Float32Array(n * n)
@@ -56,7 +55,7 @@ export function ringPixels(percent: number, rgb: Rgb, scale = 1): Uint8Array {
           const x = px + (sx + 0.5) * step - center
           const y = py + (sy + 0.5) * step - center
           const r = Math.hypot(x, y)
-          if (r > OUTER * scale || r < INNER * scale) continue
+          if (r > OUTER || r < INNER) continue
           if (turnOf(x, y) < fill) arc++
           else rest++
         }

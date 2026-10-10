@@ -1,0 +1,50 @@
+{
+  "name": "agent-board",
+  "version": "2.0.0",
+  "description": "A row above the prompt for the subagents Claude starts: running and done per model, a token bar, and a working pixel crew",
+  "author": {
+    "name": "Oualid0"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "maxHaiku": {
+      "type": "number",
+      "title": "Haiku limit",
+      "description": "How many Haiku subagents may run at once. Set, the row shows running/limit and turns red above it; unset, only the count. Whole numbers from 1 up."
+    },
+    "maxSonnet": {
+      "type": "number",
+      "title": "Sonnet limit",
+      "description": "How many Sonnet subagents may run at once. Set, the row shows running/limit and turns red above it; unset, only the count. Whole numbers from 1 up."
+    },
+    "maxOpus": {
+      "type": "number",
+      "title": "Opus limit",
+      "description": "How many Opus subagents may run at once. Set, the row shows running/limit and turns red above it; unset, only the count. Whole numbers from 1 up."
+    },
+    "hideAfter": {
+      "type": "number",
+      "title": "Hide after (minutes)",
+      "description": "Minutes after the last subagent ended until the row hides; it comes back with the next one. 0 keeps it shown.",
+      "default": 5
+    },
+    "titles": {
+      "type": "boolean",
+      "title": "Show titles",
+      "description": "Show the words `agents` (the row's title) and `Split` (the token bar's label), which are hidden by default.",
+      "default": false
+    },
+    "compact": {
+      "type": "boolean",
+      "title": "Always short labels",
+      "description": "Always write the families as Ha, So, Op, Ot (and the bar as Sp), not only when the terminal is narrow.",
+      "default": false
+    },
+    "hideUnused": {
+      "type": "boolean",
+      "title": "Hide unused families",
+      "description": "Show a family only once it had a subagent in this chat (Other likewise); by default Haiku, Sonnet and Opus always show.",
+      "default": false
+    }
+  }
+}

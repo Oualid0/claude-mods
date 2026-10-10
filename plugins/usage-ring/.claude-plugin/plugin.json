@@ -1,7 +1,7 @@
 {
   "name": "usage-ring",
-  "version": "1.0.1",
-  "description": "Rings above the prompt for limits, context, todos, tokens, cost and the prompt cache",
+  "version": "2.0.0",
+  "description": "A band above the prompt for your limits, this chat's context, prompt cache and todos, and its token total and rate",
   "author": {
     "name": "Oualid0"
   },
@@ -11,6 +11,30 @@
       "type": "boolean",
       "title": "Write usage-limits.json",
       "description": "Keep the session and weekly limits in $CLAUDE_CONFIG_DIR/usage-limits.json (default ~/.claude) for other tools to read, and seed the rings from it when a session starts.",
+      "default": false
+    },
+    "showModel": {
+      "type": "boolean",
+      "title": "Show the model",
+      "description": "Show the model and its effort (e.g. Opus 5.5 (mid)) in grey next to the pixel Claude.",
+      "default": false
+    },
+    "titles": {
+      "type": "boolean",
+      "title": "Show group titles",
+      "description": "Start each group with its title: limits, chat and tokens.",
+      "default": false
+    },
+    "compact": {
+      "type": "boolean",
+      "title": "Short labels",
+      "description": "Always use the two-letter labels (Wk, Se, Cx, Ca, Td, Tt, Rt), not only when the terminal is narrow.",
+      "default": false
+    },
+    "showTokens": {
+      "type": "boolean",
+      "title": "Show the tokens",
+      "description": "Show the tokens group: all tokens this chat used and the rate of the last minute (Tokens 39.5M  6k tok/s).",
       "default": false
     }
   }

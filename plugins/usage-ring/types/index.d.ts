@@ -13,9 +13,6 @@ export type TodoStatus = 'pending' | 'in_progress' | 'completed'
 /** Task or todo id → its status. */
 export type Todos = Record<string, TodoStatus>
 
-/** Where the cache lifetime in use comes from: the default, a hit, or a miss. */
-export type TtlSource = 'assumed' | 'hit' | 'miss'
-
 export type Cache = {
   /** When the last main-thread request was sent: the entry's lifetime starts there. */
   lastAt?: number
@@ -23,10 +20,14 @@ export type Cache = {
   model?: string
   /** Lifetime in milliseconds. */
   ttl: number
-  source: TtlSource
-  /** Share of the last request's input that the cache served, 0..1. */
-  readShare?: number
+  /** Telling misses in a row that could mean a 5-minute lifetime; absent at 0. */
+  misses?: number
+  /** Dropped by a model switch or a compaction: cold until the next request. */
+  isCold?: boolean
 }
+
+/** When a model request used how many tokens, as `[at, tokens]`; only the last minute is kept. */
+export type TokenLog = [at: number, tokens: number][]
 
 /** The main loop's model and the effort its last request asked for. */
 export type Model = { id?: string; effort?: string | number }
@@ -36,15 +37,14 @@ declare module 'claude-code' {
     'usage-ring': {
       usage: Usage
       todos: Todos
-      now: number
       /** Animation frame counter. */
       frame: number
       /** A turn of this session is running. */
       isBusy: boolean
       /** Tokens used since the session started, all four counts of every request, subagents included. */
       tokens: number
-      /** Session cost so far in US dollars. */
-      costUsd: number
+      /** The requests of the last minute, for the token rate. */
+      recent: TokenLog
       /** The prompt cache's countdown. */
       cache: Cache
       model: Model

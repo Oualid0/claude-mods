@@ -1,4 +1,4 @@
-// Pure pixel logic of the pixel Claude beside the chat chip: a hammering and a
+// Pure pixel logic of the pixel Claude beside the band's frame: a hammering and a
 // sleeping frame as RGBA. No `$` in here, so the tests can drive it directly.
 import { hexToRgb, hot } from './ring'
 import type { Rgb } from './ring'
@@ -118,10 +118,10 @@ function figure(c: Canvas, top: number, x0: number, eyeDx: number, eyeDy: number
   for (const x of [5, 9, 13, 17]) c.rect(x0 + x, top + 11, 2, legs, BODY)
 }
 
-/** Faces left and hammers the chip on its left: 0 raised, 1 swinging, 2 hit, 3 hit with sparks. */
+/** Faces left and hammers the frame on its left: 0 raised, 1 swinging, 2 hit, 3 hit with sparks. */
 export function hammerPixels(pose: number): Uint8Array {
   const c = canvas()
-  // High in the picture, flush left, so the hammer reaches the chip beside it.
+  // High in the picture, flush left, so the hammer reaches the frame beside it.
   const top = 5
   figure(c, top, 0, -2, 0, 'right', 4)
   // Left arm: from the body out to a hand at x 2..3, raised, halfway or level.
@@ -137,7 +137,7 @@ export function hammerPixels(pose: number): Uint8Array {
     c.put(1, hy - 2, HANDLE)
     c.rect(0, hy - 6, 3, 4, IRON)
   } else {
-    // Hit: the head against the left edge, which is the chip's frame.
+    // Hit: the head against the left edge, which is the frame.
     c.rect(0, hy - 2, 2, 4, IRON)
     if (pose === 3) {
       for (const [x, y] of [

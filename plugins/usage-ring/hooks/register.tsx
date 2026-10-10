@@ -1,54 +1,59 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Cache, Model, Todos, Usage } from '../types'
-import { FRESH_CACHE, afterRequest, cacheLeft, isCacheLow } from './cache'
+import type { Cache, Model, Todos, TokenLog, Usage } from '../types'
+import { FRESH_CACHE, afterRequest, cacheSegment, coldCache, ttlOf, withTtl } from './cache'
 import { CLAUDE, SCALE, SPRITE, SPRITE_W, claudePixels, hammerPixels } from './claude'
 import {
   RING_COLUMNS,
   RING_ROWS,
   SPRITE_COLUMNS,
-  ALERT,
   GAP,
   LABELS,
-  entries,
+  labelOf,
   fit,
   fromList,
+  fromSnapshot,
   fromTodoWrite,
   groups,
+  isOn,
   modelLabel,
   MODEL_GAP,
+  SEPARATOR,
+  rateAt,
   segments,
+  tokensEntry,
   snapshot,
   usageFrom,
   withCreated,
   withUpdated,
+  withTokens,
+  ZERO,
 } from './model'
 import { RING_SIZE, hexToRgb, hot, ringGlyph, ringPixels, toBase64 } from './ring'
 
 const usage = atom({ plugin: 'usage-ring', key: 'usage' } as const, {} as Usage)
 const todos = atom({ plugin: 'usage-ring', key: 'todos' } as const, {} as Todos)
-const now = atom({ plugin: 'usage-ring', key: 'now' } as const, 0)
 
 // Tokens this chat used since the session started: all four counts of every
 // request, subagents included. In $.state, so a reload keeps them.
 const tokens = atom({ plugin: 'usage-ring', key: 'tokens' } as const, 0)
-// What the whole session cost so far, in US dollars, as /cost totals it.
-const costUsd = atom({ plugin: 'usage-ring', key: 'costUsd' } as const, 0)
+// The requests of the last minute, for the token rate.
+const recent = atom({ plugin: 'usage-ring', key: 'recent' } as const, [] as TokenLog)
 // Animation frame, and whether a turn of this session is running.
 const frame = atom({ plugin: 'usage-ring', key: 'frame' } as const, 0)
 const isBusy = atom({ plugin: 'usage-ring', key: 'isBusy' } as const, false)
 const cache = atom({ plugin: 'usage-ring', key: 'cache' } as const, FRESH_CACHE as Cache)
 const model = atom({ plugin: 'usage-ring', key: 'model' } as const, {} as Model)
 
-/** The chat chip's frame on a hammer hit: a brighter orange. */
-const HIT_FLASH = '#f59a6c'
+/** Milliseconds per frame while a turn runs (the hammer swings) and while the sprite sleeps (the z's rise). */
 const FRAME_MS = 150
+const SLEEP_FRAME_MS = 1000
+/** Both frame counts divide it, so the poses stay in step when the counter wraps. */
+const FRAME_WRAP = 12_000
 /** The hammer's swing: raised, raised, swinging, hit, hit with sparks, swinging back. */
 const SWING = [0, 0, 1, 2, 3, 1]
-/** The pose in which the hammer hits and sparks. */
-const HIT_POSE = 3
-/** The z's change every second frame. */
+/** The z's change with every frame of the sleeping sprite. */
 const Z_PHASES = 12
 
 const LIMITS_FILE = 'usage-limits.json'
@@ -66,15 +71,12 @@ async function seedFromSnapshot($: EngineInterface): Promise<void> {
   try {
     const dir = await configDir($)
     if (!dir) return
-    const raw = JSON.parse(await $.fs.read(`${dir}/${LIMITS_FILE}`)) as {
-      session?: { usedPercent?: number; resetsAt?: string | null } | null
-      week?: { usedPercent?: number } | null
-    }
+    const seed = fromSnapshot(JSON.parse(await $.fs.read(`${dir}/${LIMITS_FILE}`)), await $.clock.now())
     await update($, usage, u => ({
       ...u,
-      sessionUsed: u.sessionUsed ?? raw.session?.usedPercent,
-      sessionResetsAt: u.sessionResetsAt ?? raw.session?.resetsAt ?? undefined,
-      weekUsed: u.weekUsed ?? raw.week?.usedPercent,
+      sessionUsed: u.sessionUsed ?? seed.sessionUsed,
+      sessionResetsAt: u.sessionResetsAt ?? seed.sessionResetsAt,
+      weekUsed: u.weekUsed ?? seed.weekUsed,
     }))
   } catch {
     // No snapshot yet: the rings appear with the first reading.
@@ -112,6 +114,38 @@ async function contextPercent(
   }
 }
 
+// The frame clock: one timer, 150 ms while a turn runs, one second while the sprite sleeps.
+let tick: Timer | undefined
+let tickMs = 0
+
+function stopTick(): void {
+  tick?.cancel()
+  tick = undefined
+}
+
+function startTick($: EngineInterface, ms: number): void {
+  stopTick()
+  tickMs = ms
+  // Only a redraw: the frame number picks the hammer pose or the z's.
+  tick = $.clock.every(ms, () => {
+    void update($, frame, f => (f + 1) % FRAME_WRAP).catch(() => undefined)
+  })
+}
+
+/** Switches a running clock to `ms`; before session.start (or after the session ended) there is none. */
+function retick($: EngineInterface, ms: number): void {
+  if (tick && tickMs !== ms) startTick($, ms)
+}
+
+/** Runs `step`, ignoring a failure: the steps of a start do not depend on each other. */
+async function attempt(step: () => Promise<unknown>): Promise<void> {
+  try {
+    await step()
+  } catch {
+    // The band fills in with the first reading instead.
+  }
+}
+
 const pictures = new Map<string, string>()
 
 /** The base64 picture for `key`, drawn once. */
@@ -128,41 +162,36 @@ function picture(percent: number, color: string): string {
 }
 
 export const register: Register = (on, options) => {
-  const writesLimits = options.limitsFile === true
+  const writesLimits = isOn(options.limitsFile)
+  const showsModel = isOn(options.showModel)
+  const layout = { titles: isOn(options.titles), compact: isOn(options.compact), tokens: isOn(options.showTokens) }
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
-    const startedAt = await $.clock.now()
-    await update($, now, () => startedAt)
-    const sessionUsage = await $.session.usage()
-    const { rateLimits, context } = sessionUsage
-    const percent = await contextPercent($, context)
-    await update($, usage, u => usageFrom(rateLimits, percent, u))
-    if (writesLimits && rateLimits.length === 0) await seedFromSnapshot($)
-    await syncTodos($)
-    try {
+    // A repeated session.start replaces the timer instead of adding a second.
+    stopTick()
+    let hasLimits = false
+    await attempt(async () => {
+      const { rateLimits, context } = await $.session.usage()
+      hasLimits = rateLimits.length > 0
+      const percent = await contextPercent($, context)
+      await update($, usage, u => usageFrom(rateLimits, percent, u))
+    })
+    if (writesLimits && !hasLimits) await attempt(() => seedFromSnapshot($))
+    await attempt(() => syncTodos($))
+    await attempt(async () => {
       const id = await $.session.model()
       await update($, model, m => ({ ...m, id }))
-    } catch {
-      // No model yet: the label appears with the first request.
-    }
-    const usd = sessionUsage.cost?.usd
-    if (usd !== undefined) await update($, costUsd, () => usd)
-    // Only a redraw: the frame number picks the hammer pose or the z's.
-    $.clock.every(FRAME_MS, () => {
-      void update($, frame, f => (f + 1) % 10_000)
     })
-    $.clock.every(60_000, () => {
-      void $.clock.now().then(t => update($, now, () => t))
+    let isRunning = false
+    await attempt(async () => {
+      isRunning = await read($, isBusy)
     })
+    startTick($, isRunning ? FRAME_MS : SLEEP_FRAME_MS)
     return result
   })
 
   on('session.measure', async ($, e, next) => {
-    if (e.cost) {
-      const usd = e.cost.usd
-      await update($, costUsd, () => usd)
-    }
     const percent = await contextPercent($, e.context)
     await update($, usage, u => usageFrom(e.rateLimits, percent, u))
     if (writesLimits) {
@@ -179,6 +208,7 @@ export const register: Register = (on, options) => {
 
   on('turn.start', async ($, e, next) => {
     await update($, isBusy, () => true)
+    retick($, FRAME_MS)
     return next(e)
   })
 
@@ -193,6 +223,8 @@ export const register: Register = (on, options) => {
     if (u) {
       const used = u.input_tokens + u.output_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens
       await update($, tokens, t => t + used)
+      const at = await $.clock.now()
+      await update($, recent, log => withTokens(log, at, used))
       // Subagents keep caches of their own; the band times the main thread's.
       if (e.agentId === undefined) await update($, cache, c => afterRequest(c, sentAt, u.model, u))
     }
@@ -200,8 +232,54 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined) await update($, isBusy, () => false)
+    if (e.agentId === undefined) {
+      await update($, isBusy, () => false)
+      retick($, SLEEP_FRAME_MS)
+    }
     return next(e)
+  })
+
+  // A model switch drops the cache (every model has one of its own), and so does
+  // a compaction (the history it served is gone). Both are cold until the next request.
+  // A subagent's switch or compaction leaves the main thread's cache alone.
+  on('classic.PostModelSwitch', async ($, e, next) => {
+    const isMain = e.agent_id === undefined
+    const isSwitch = e.from_model !== e.to_model && e.source !== 'resume'
+    // The engine names the lifetime on a switch (5m or 1h): it settles what the requests could only hint at.
+    const ttl = ttlOf(e.cache_ttl)
+    if (isMain && (isSwitch || ttl !== undefined)) {
+      await update($, cache, c => {
+        const named = ttl === undefined ? c : withTtl(c, ttl)
+        return isSwitch ? coldCache(named) : named
+      })
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('classic.PostCompact', async ($, e, next) => {
+    if (e.agent_id === undefined) await update($, cache, c => coldCache(c))
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // A new chat (after /clear, or another one resumed in its place) starts with no
+  // cache, no tokens, no rate, no todos and no context fill of its own, and the frame
+  // clock goes on: no session.start follows a /clear. Any other end stops the clock.
+  // A resumed chat brings its task list along, so it is read again once the end has
+  // passed; a cleared one is empty.
+  on('session.end', async ($, e, next) => {
+    const isNewChat = e.reason === 'clear' || e.reason === 'resume'
+    if (isNewChat) {
+      await update($, cache, () => FRESH_CACHE)
+      await update($, tokens, () => 0)
+      await update($, recent, () => [])
+      await update($, todos, () => ({}))
+      await update($, usage, u => ({ ...u, contextUsed: undefined }))
+    } else {
+      stopTick()
+    }
+    const result = await next(e)
+    if (e.reason === 'resume') await attempt(() => syncTodos($))
+    return result
   })
 
   on('tool.call', { tool: 'TaskCreate' }, async ($, e, next) => {
@@ -209,7 +287,7 @@ export const register: Register = (on, options) => {
     const id = (r.result as { task?: { id?: string } } | undefined)?.task?.id
     if (id !== undefined && !r.isError) await update($, todos, t => withCreated(t, id))
     return r
-  })
+  }).catch(($, e, next) => next(e))
 
   on('tool.call', { tool: 'TaskUpdate' }, async ($, e, next) => {
     const r = await next(e)
@@ -219,107 +297,102 @@ export const register: Register = (on, options) => {
       await update($, todos, t => withUpdated(t, id, input.status))
     }
     return r
-  })
+  }).catch(($, e, next) => next(e))
 
   on('tool.call', { tool: 'TaskList' }, async ($, e, next) => {
     const r = await next(e)
     const list = (r.result as { tasks?: { id: string; status: string }[] } | undefined)?.tasks
     if (list && !r.isError) await update($, todos, () => fromList(list))
     return r
-  })
+  }).catch(($, e, next) => next(e))
 
   on('tool.call', { tool: 'TodoWrite' }, async ($, e, next) => {
     const r = await next(e)
     const list = (e as unknown as { todos?: { status: string }[] }).todos
     if (list && !r.isError) await update($, todos, () => fromTodoWrite(list))
     return r
-  })
+  }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.surface !== 'terminal' || e.props.hasSurvey) return next(e)
 
-    // The minute tick only triggers the redraw; the time itself is read here, as
-    // the tick holds 0 until session.start has run (and /clear fires none).
-    await read($, now)
     const usedTokens = await read($, tokens)
-    const usd = await read($, costUsd)
-    const all = segments(await read($, usage), await read($, todos), await $.clock.now())
-    if (all.length === 0) return next(e)
-    const c = await read($, cache)
+    const at = await $.clock.now()
+    const rings = segments(await read($, usage), await read($, todos), at)
+    if (rings.length === 0) return next(e)
+    const all = [...rings, cacheSegment(await read($, cache), at)]
     const m = await read($, model)
     const extras = {
-      tokens: usedTokens,
-      costUsd: usd,
-      cache: cacheLeft(c, await $.clock.now()),
-      model: modelLabel(m.id, m.effort),
+      total: usedTokens,
+      rate: rateAt(await read($, recent), at),
+      model: showsModel ? modelLabel(m.id, m.effort) : undefined,
     }
-    const shown = fit(all, extras, e.props.bodyColumns)
-    // Not even the session ring fits: show nothing rather than squeeze it.
+    const shown = fit(all, extras, e.props.bodyColumns, layout)
+    // Not even one entry fits: show nothing rather than squeeze it.
     if (!shown) return next(e)
-    const chatEntries = entries(extras, shown)
+    const tokenCount = tokensEntry(extras, shown)
 
-    // Other mods' drawings go above the rings, so the rings stay next to the prompt.
+    // Other mods' drawings go above the band, so it stays next to the prompt.
     const below = await next(e)
     const { Box, Text, Image } = $.ui.resolve(e)
     const f = await read($, frame)
     const busy = await read($, isBusy)
     const pose = SWING[f % SWING.length]!
-    const isHit = busy && pose === HIT_POSE
 
-    const cacheIsLow = isCacheLow(c, await $.clock.now())
-    const entry = (label: string, value: string) => (
-      <Box key={label} flexDirection="row" gap={1}>
-        <Text dimColor>{label}</Text>
-        <Text color={hot(label === 'Ca' && cacheIsLow ? ALERT : CLAUDE)} bold>
-          {value}
+    // A value in the bright color of its entry, or in the muted ZERO color (not bold) when it is 0.
+    const value = (text: string, isDim: boolean, color: string) =>
+      isDim ? (
+        <Text color={ZERO}>{text}</Text>
+      ) : (
+        <Text color={hot(color)} bold>
+          {text}
         </Text>
+      )
+    // An entry: its dimmed label, a ring for the limits and the context, then the value.
+    const entry = (s: typeof shown.segments[number]) => (
+      <Box key={s.id} flexDirection="row" gap={1} alignItems="center">
+        <Text dimColor>{labelOf(s, shown)}</Text>
+        {s.hasRing ? (
+          <Image
+            key={`ring-${s.id}`}
+            source={{ rgba: picture(s.percent, s.color), width: RING_SIZE, height: RING_SIZE }}
+            columns={RING_COLUMNS}
+            rows={RING_ROWS}
+            alt={ringGlyph(s.percent)}
+          />
+        ) : null}
+        {value(s.time ? s.text.slice(0, -(s.time.length + 1)) : s.text, s.isDim === true, s.textColor ?? s.color)}
+        {s.time ? (
+          <Text color={hot(CLAUDE)} bold>
+            {s.time}
+          </Text>
+        ) : null}
       </Box>
     )
-    // One chip per group: a rounded frame and label in terracotta.
-    const chip = (label: string, list: typeof shown.segments, withEntries: boolean) => (
-      <Box
-        key={label}
-        borderStyle="round"
-        borderColor={label === LABELS.chat && isHit ? HIT_FLASH : CLAUDE}
-        paddingX={1}
-      >
-        <Box flexDirection="row" gap={1} alignItems="center">
-          {shown.hasLabels ? <Text color={CLAUDE}>{label}</Text> : null}
-          <Box flexDirection="row" gap={GAP} alignItems="center">
-            {list.map(s => (
-              <Box key={s.id} flexDirection="row" gap={1} alignItems="center">
-                <Text dimColor>{s.short}</Text>
-                <Image
-                  key={`ring-${s.id}`}
-                  source={{ rgba: picture(s.percent, s.color), width: RING_SIZE, height: RING_SIZE }}
-                  columns={RING_COLUMNS}
-                  rows={RING_ROWS}
-                  alt={ringGlyph(s.percent)}
-                />
-                <Text color={hot(s.color)} bold>
-                  {s.time ? s.text.slice(0, -(s.time.length + 1)) : s.text}
-                </Text>
-                {s.time ? (
-                  <Text color={hot(CLAUDE)} bold>
-                    {s.time}
-                  </Text>
-                ) : null}
-              </Box>
-            ))}
-            {withEntries && chatEntries.length > 0 ? (
-              <Box flexDirection="row" gap={1}>
-                {chatEntries.flatMap(([label, value], i) =>
-                  i === 0 ? [entry(label, value)] : [<Text key={`gap-${label}`}> </Text>, entry(label, value)],
-                )}
-              </Box>
-            ) : null}
-          </Box>
+    // A group: its title in terracotta (with the `titles` option), then its entries.
+    const group = (title: string, items: ReturnType<typeof entry>[]) => (
+      <Box key={title} flexDirection="row" gap={1} alignItems="center">
+        {shown.hasTitles ? <Text color={CLAUDE}>{title}</Text> : null}
+        <Box flexDirection="row" gap={GAP} alignItems="center">
+          {items}
         </Box>
       </Box>
     )
+    // The tokens group is one entry without a ring: the dimmed label, the total, then the rate a gap apart.
+    const tokenItems = tokenCount
+      ? [
+          <Box key="tokens-entry" flexDirection="row" gap={1}>
+            <Text dimColor>{tokenCount.label}</Text>
+            <Box flexDirection="row" gap={GAP}>
+              {value(tokenCount.total, tokenCount.isTotalZero, CLAUDE)}
+              {tokenCount.rate !== undefined ? value(tokenCount.rate, tokenCount.isRateZero, CLAUDE) : null}
+            </Box>
+          </Box>,
+        ]
+      : []
 
     // Hammering while a turn runs, asleep otherwise; 24 x 24 sprite pixels, SCALE image pixels each.
-    const zPhase = Math.floor(f / 2) % Z_PHASES
+    const zPhase = f % Z_PHASES
     const spriteKey = busy ? `h${pose}` : `s${zPhase}`
     const sprite = (
       <Image
@@ -335,17 +408,24 @@ export const register: Register = (on, options) => {
       />
     )
     const { limits, chat } = groups(shown.segments)
-    const hasChat = chat.length > 0 || chatEntries.length > 0
+    // The groups that have something to show, one frame around them, a dimmed bar between.
+    const parts = [
+      limits.length > 0 ? group(LABELS.limits, limits.map(entry)) : null,
+      chat.length > 0 ? group(LABELS.chat, chat.map(entry)) : null,
+      tokenItems.length > 0 ? group(LABELS.tokens, tokenItems) : null,
+    ].filter(part => part !== null)
     return (
       <Box flexDirection="column">
         {below}
         <Box flexDirection="row" alignItems="center">
-          {limits.length > 0 ? (
-            <Box marginRight={hasChat ? 1 : 0}>
-              {chip(LABELS.limits, limits, false)}
-            </Box>
-          ) : null}
-          {hasChat ? chip(LABELS.chat, chat, true) : null}
+          <Box borderStyle="round" borderColor={CLAUDE} paddingX={1} flexDirection="row">
+            {parts.map((part, i) => (
+              <Box key={`part-${i}`} flexDirection="row">
+                {i > 0 ? <Text dimColor>{SEPARATOR}</Text> : null}
+                {part}
+              </Box>
+            ))}
+          </Box>
           {shown.hasSprite ? sprite : null}
           {shown.hasModel && extras.model !== undefined ? (
             <Box marginLeft={MODEL_GAP}>
