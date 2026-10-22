@@ -1,0 +1,9 @@
+#!/bin/sh
+# Pre-commit checks, enabled per clone with core.hooksPath=.githooks.
+
+# Secrets: scan what is staged. A missing gitleaks warns instead of blocking.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --staged --redact --no-banner || exit 1
+else
+  echo "pre-commit: gitleaks not installed, secret scan skipped" >&2
+fi

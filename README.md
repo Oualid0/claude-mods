@@ -154,6 +154,8 @@ echo '{"maxHaiku":"4","maxSonnet":"2","maxOpus":"1","hideAfter":"5","titles":"fa
   `claude plugin test plugins/<name>`.
 - Installed from a local clone, Claude Code reads the files in place: changes apply with
   `/reload-plugins` or the next session.
+- Once per clone, enable the pre-commit secret scan (`.githooks/pre-commit`, runs `gitleaks` on
+  staged changes): `git config core.hooksPath .githooks`. The setting is local to the clone.
 - Both mods draw above the prompt; each render hook calls `next(e)` and keeps what is beneath
   (`agent-board`'s row on top, `usage-ring`'s band next to the prompt).
 
