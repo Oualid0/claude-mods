@@ -1,8 +1,16 @@
 # Changelog
 
 All notable changes to the mods in this repository. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Both plugins are at 2.0.0;
-earlier entries name the plugin version they belong to.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). `usage-ring` is at 2.1.0,
+`agent-board` at 2.0.0; earlier entries name the plugin version they belong to.
+
+## usage-ring 2.1.0 - 2026-11-02
+
+### Changed
+
+- The `Context` ring counts up to the compaction window (`autoCompactWindow`, the
+  auto-compact buffer not taken off) instead of the model's full window; without a
+  breakdown it keeps the engine's figure.
 
 ## 2.0.0 - 2026-10-10
 

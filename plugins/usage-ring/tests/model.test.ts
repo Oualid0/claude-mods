@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { ALERT, COLORS, FRAME, GAP, GREY, MODEL_GAP, SEPARATOR, SHORT, SPRITE_COLUMNS, WARN, ZERO, compact, duration, fit, fromSnapshot, isOn, perSecond, rateAt, tokensEntry, widthOf, modelLabel, modelName, groups, remaining, segments, snapshot, type Layout, withCreated, withTokens, withUpdated } from '../hooks/model'
+import { compactionLimit, contextFill, ALERT, COLORS, FRAME, GAP, GREY, MODEL_GAP, SEPARATOR, SHORT, SPRITE_COLUMNS, WARN, ZERO, compact, duration, fit, fromSnapshot, isOn, perSecond, rateAt, tokensEntry, widthOf, modelLabel, modelName, groups, remaining, segments, snapshot, type Layout, withCreated, withTokens, withUpdated } from '../hooks/model'
 import { SCALE, SPRITE, SPRITE_W, claudePixels, hammerPixels } from '../hooks/claude'
 import { RING_SIZE, ringPixels, toBase64 } from '../hooks/ring'
 import { COLD, FRESH_CACHE, LONG_TTL, SHORT_TTL, afterRequest, cacheSegment, coldCache, ttlOf, withTtl } from '../hooks/cache'
@@ -509,4 +509,22 @@ test('the engine names the lifetime: 5m and 1h are taken, anything else is ignor
   for (const unknown of [undefined, null, '', '30m', 3600, {}]) expect(ttlOf(unknown)).toBeUndefined()
   // It is authoritative: the count of misses starts over and the rest stays.
   expect(withTtl({ lastAt: 5, model: 'm', ttl: LONG_TTL, misses: 1, isCold: true }, SHORT_TTL)).toEqual({ lastAt: 5, model: 'm', ttl: SHORT_TTL, isCold: true })
+})
+
+test('the compaction limit is the whole compaction window, the buffer not taken off', () => {
+  expect(compactionLimit({ rawMaxTokens: 500_000 })).toBe(500_000)
+  expect(compactionLimit({ rawMaxTokens: 0 })).toBeUndefined()
+  expect(compactionLimit(undefined)).toBeUndefined()
+})
+
+test('the context fill counts up to the compaction limit, else keeps the engine figure', () => {
+  expect(contextFill(250_000, 500_000, 25)).toBe(50)
+  expect(contextFill(600_000, 500_000, 60)).toBe(120)
+  expect(contextFill(250_000, undefined, 25)).toBe(25)
+  expect(contextFill(undefined, 500_000, 7)).toBe(7)
+})
+
+test('a fill past the limit shows as 100%', () => {
+  const [context] = segments({ contextUsed: contextFill(600_000, 500_000) }, {}, NOW)
+  expect(context).toMatchObject({ id: 'context', percent: 100, text: '100%' })
 })

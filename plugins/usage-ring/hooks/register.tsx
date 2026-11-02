@@ -6,6 +6,8 @@ import { FRESH_CACHE, afterRequest, cacheSegment, coldCache, ttlOf, withTtl } fr
 import { CLAUDE, SCALE, SPRITE, SPRITE_W, claudePixels, hammerPixels } from './claude'
 import {
   RING_COLUMNS,
+  compactionLimit,
+  contextFill,
   RING_ROWS,
   SPRITE_COLUMNS,
   GAP,
@@ -96,22 +98,45 @@ async function syncTodos($: EngineInterface): Promise<void> {
   }
 }
 
-/**
- * The context fill: the last response's figure, or before the first response
- * (a new chat, after /clear) the local estimate of what is already loaded
- * (system prompt, tools, memory files). Undefined when neither is known.
- */
-async function contextPercent(
-  $: EngineInterface,
-  context: { percent?: number },
-): Promise<number | undefined> {
-  if (context.percent !== undefined) return context.percent
+/** The compaction limit per model; module-local, so a reload or a new session asks again. */
+const limits = new Map<string, number>()
+
+/** The breakdown, estimated locally (no request); undefined when it cannot be had. */
+async function breakdown($: EngineInterface) {
   try {
-    const { context: c } = await $.session.usage({ breakdown: 'summary' })
-    return c.breakdown?.percentage
+    return (await $.session.usage({ breakdown: 'summary' })).context.breakdown
   } catch {
     return undefined
   }
+}
+
+/**
+ * The context fill against the compaction window (`autoCompactWindow`, the buffer not
+ * taken off; 100% = the window is full): the last response's input tokens over that limit, or before the first response
+ * (a new chat, after /clear) the local estimate of what is already loaded (system
+ * prompt, tools, memory files). The limit is read once per model. Without a limit the
+ * engine's figure against the model's full window stands; undefined when nothing is known.
+ */
+async function contextPercent(
+  $: EngineInterface,
+  context: { tokens?: number; percent?: number },
+): Promise<number | undefined> {
+  if (context.tokens === undefined) {
+    const b = await breakdown($)
+    return b ? contextFill(b.totalTokens, compactionLimit(b), b.percentage) : context.percent
+  }
+  let id: string | undefined
+  try {
+    id = await $.session.model()
+  } catch {
+    id = undefined
+  }
+  let limit = id === undefined ? undefined : limits.get(id)
+  if (limit === undefined) {
+    limit = compactionLimit(await breakdown($))
+    if (id !== undefined && limit !== undefined) limits.set(id, limit)
+  }
+  return contextFill(context.tokens, limit, context.percent)
 }
 
 // The frame clock: one timer, 150 ms while a turn runs, one second while the sprite sleeps.
@@ -170,6 +195,8 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     // A repeated session.start replaces the timer instead of adding a second.
     stopTick()
+    // Settings may have moved the compaction window since the last start.
+    limits.clear()
     let hasLimits = false
     await attempt(async () => {
       const { rateLimits, context } = await $.session.usage()

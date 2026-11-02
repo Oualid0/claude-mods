@@ -78,6 +78,25 @@ export function usageFrom(
   }
 }
 
+/**
+ * The token count the context ring counts up to: the compaction window
+ * (`autoCompactWindow`, the auto-compact buffer not taken off). Undefined when the
+ * breakdown does not name it.
+ */
+export function compactionLimit(info: { rawMaxTokens?: number } | undefined): number | undefined {
+  const limit = info?.rawMaxTokens
+  return limit !== undefined && Number.isFinite(limit) && limit > 0 ? limit : undefined
+}
+
+/**
+ * The context fill in percent of `limit` (100% = the compaction window is full); the engine's
+ * `fallback` (the model's full window) when the tokens or the limit are unknown.
+ */
+export function contextFill(tokens: number | undefined, limit: number | undefined, fallback?: number): number | undefined {
+  if (tokens === undefined || limit === undefined) return fallback
+  return (tokens / limit) * 100
+}
+
 /** A span as the band shows it: `4:50` (hours:minutes) from an hour up, `33m` below. */
 export function duration(ms: number): string {
   const minutes = Math.max(0, Math.floor(ms / 60_000))
