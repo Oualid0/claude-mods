@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { compactionLimit, contextFill, ALERT, COLORS, FRAME, GAP, GREY, MODEL_GAP, SEPARATOR, SHORT, SPRITE_COLUMNS, WARN, ZERO, compact, duration, fit, fromSnapshot, isOn, perSecond, rateAt, tokensEntry, widthOf, modelLabel, modelName, groups, remaining, segments, snapshot, type Layout, withCreated, withTokens, withUpdated } from '../hooks/model'
+import { compactionLimit, contextFill, ALERT, COLORS, FULL, FRAME, GAP, GREY, MODEL_GAP, SEPARATOR, SHORT, SPRITE_COLUMNS, WARN, ZERO, compact, duration, fit, fromSnapshot, isOn, perSecond, rateAt, tokensEntry, widthOf, modelLabel, modelName, groups, remaining, segments, snapshot, type Layout, withCreated, withTokens, withUpdated } from '../hooks/model'
 import { SCALE, SPRITE, SPRITE_W, claudePixels, hammerPixels } from '../hooks/claude'
 import { RING_SIZE, ringPixels, toBase64 } from '../hooks/ring'
 import { COLD, FRESH_CACHE, LONG_TTL, SHORT_TTL, afterRequest, cacheSegment, coldCache, ttlOf, withTtl } from '../hooks/cache'
@@ -331,22 +331,21 @@ test('the model label is the short model name with its effort', () => {
 })
 
 
-test('limit rings turn red from 95%, the context ring yellow from 50% and red from 80%, the todo ring never', () => {
-  const list = segments({ weekUsed: 94, sessionUsed: 95, contextUsed: 99 }, { a: 'completed' }, NOW)
-  expect(list.map(s => [s.id, s.color === ALERT])).toEqual([
-    ['week', false],
-    ['session', true],
-    ['context', true],
-    ['todos', false],
+test('week, session and context turn yellow from 70%, red from 90%, deep red at 100%, the todo ring never', () => {
+  const list = segments({ weekUsed: 69, sessionUsed: 90, contextUsed: 100 }, { a: 'completed' }, NOW)
+  expect(list.map(s => [s.id, s.color])).toEqual([
+    ['week', COLORS.week],
+    ['session', ALERT],
+    ['context', FULL],
+    ['todos', COLORS.todos],
   ])
-  const context = (used: number) => segments({ contextUsed: used }, {}, NOW)[0]!.color
-  expect(context(49)).not.toBe(WARN)
-  expect(context(49)).not.toBe(ALERT)
-  expect(context(50)).toBe(WARN)
-  expect(context(79)).toBe(WARN)
-  expect(context(80)).toBe(ALERT)
-  // The limits stay as they were.
-  expect(segments({ weekUsed: 80, sessionUsed: 60 }, {}, NOW).map(s => s.color)).not.toContain(WARN)
+  const colors = (used: number) => segments({ weekUsed: used, sessionUsed: used, contextUsed: used }, {}, NOW).map(s => s.color)
+  expect(colors(69)).toEqual([COLORS.week, COLORS.session, COLORS.context])
+  expect(colors(70)).toEqual([WARN, WARN, WARN])
+  expect(colors(89)).toEqual([WARN, WARN, WARN])
+  expect(colors(90)).toEqual([ALERT, ALERT, ALERT])
+  expect(colors(99)).toEqual([ALERT, ALERT, ALERT])
+  expect(colors(100)).toEqual([FULL, FULL, FULL])
 })
 
 test('the cache ring drains from the lifetime, its yellow and red scaled to it', () => {

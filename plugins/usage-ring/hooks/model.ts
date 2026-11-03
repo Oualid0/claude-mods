@@ -7,26 +7,24 @@ import type { TodoStatus, Todos, TokenLog, Usage } from '../types'
 /** Claude's terracotta: every ring, the frame and the titles. */
 export const TERRACOTTA = '#d97757'
 
-/** A red that sits next to the terracotta: rings from 95% on and a cache about to lapse. */
+/** A red that sits next to the terracotta: rings from 90% on and a cache about to lapse. */
 export const ALERT = '#e5484d'
-/** A yellow that sits next to the terracotta and the red: a context filling up, a cache running low. */
+/** A yellow that sits next to the terracotta and the red: a ring filling up, a cache running low. */
 export const WARN = '#e5b83c'
+/** A deeper red than ALERT: a ring at 100% (a limit used up, the compaction window full). */
+export const FULL = '#b3151b'
 /** The grey of a cache that holds nothing (cold). */
 export const GREY = '#8a8a8a'
 /** A muted terracotta for a value of 0: apart from the grey labels, quieter than the bright values. */
 export const ZERO = '#9a5a44'
-/** From this fill on a limit ring turns red. */
-export const ALERT_PERCENT = 95
-/** From this fill on the context ring turns yellow, then red. */
-export const CONTEXT_WARN_PERCENT = 50
-export const CONTEXT_ALERT_PERCENT = 80
+/** From this fill on a ring (week, session, context) turns yellow, then red, then deep red. */
+export const WARN_PERCENT = 70
+export const ALERT_PERCENT = 90
+export const FULL_PERCENT = 100
 
-/** The color of a limit ring: red from 95%, otherwise `base`. */
-export const ringColor = (percent: number, base: string): string => (percent >= ALERT_PERCENT ? ALERT : base)
-
-/** The color of the context ring: yellow from 50%, red from 80%, otherwise `base`. */
-export const contextColor = (percent: number, base: string): string =>
-  percent >= CONTEXT_ALERT_PERCENT ? ALERT : percent >= CONTEXT_WARN_PERCENT ? WARN : base
+/** The color of a ring: yellow from 70%, red from 90%, deep red at 100%, otherwise `base`. */
+export const ringColor = (percent: number, base: string): string =>
+  percent >= FULL_PERCENT ? FULL : percent >= ALERT_PERCENT ? ALERT : percent >= WARN_PERCENT ? WARN : base
 
 export const COLORS = {
   session: TERRACOTTA,
@@ -163,7 +161,7 @@ export function segments(usage: Usage, todos: Todos, now: number): Segment[] {
   }
   const contextUsed = clamp(usage.contextUsed)
   if (contextUsed !== undefined) {
-    out.push({ id: 'context', name: NAME.context, short: SHORT.context, hasRing: true, isDim: contextUsed === 0, percent: contextUsed, text: `${contextUsed}%`, color: contextColor(contextUsed, COLORS.context) })
+    out.push({ id: 'context', name: NAME.context, short: SHORT.context, hasRing: true, isDim: contextUsed === 0, percent: contextUsed, text: `${contextUsed}%`, color: ringColor(contextUsed, COLORS.context) })
   }
   const { done, total } = todoCounts(todos)
   if (total > 0) {

@@ -748,7 +748,7 @@ test('a warning or alert color wins over the zero color, and the cache is no zer
   mock.clock(on, { now: 0 })
   on('session.measure', ($, e) => ({ changed: e.changed }))
   await $.session.measure({
-    context: { window: 200000, tokens: 1, percent: 85 },
+    context: { window: 200000, tokens: 1, percent: 95 },
     rateLimits: [{ kind: 'five_hour', percentUsed: 97 }, { kind: 'seven_day', percentUsed: 0 }],
     changed: ['context', 'rateLimits'],
   } as never)

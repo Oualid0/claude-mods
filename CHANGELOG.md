@@ -1,8 +1,16 @@
 # Changelog
 
 All notable changes to the mods in this repository. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). `usage-ring` is at 2.1.0,
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). `usage-ring` is at 2.2.0,
 `agent-board` at 2.0.0; earlier entries name the plugin version they belong to.
+
+## usage-ring 2.2.0 - 2026-11-03
+
+### Changed
+
+- `Week`, `Session` and `Context` share one scale: yellow from 70%, red from 90% and a
+  deeper red (`#b3151b`) at 100%. Before, Week and Session turned red from 95% with no
+  yellow, and Context turned yellow from 50% and red from 80%.
 
 ## usage-ring 2.1.0 - 2026-11-02
 
