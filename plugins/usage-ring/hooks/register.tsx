@@ -79,6 +79,7 @@ async function seedFromSnapshot($: EngineInterface): Promise<void> {
       sessionUsed: u.sessionUsed ?? seed.sessionUsed,
       sessionResetsAt: u.sessionResetsAt ?? seed.sessionResetsAt,
       weekUsed: u.weekUsed ?? seed.weekUsed,
+      weekResetsAt: u.weekResetsAt ?? seed.weekResetsAt,
     }))
   } catch {
     // No snapshot yet: the rings appear with the first reading.

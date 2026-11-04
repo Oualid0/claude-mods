@@ -4,6 +4,7 @@ export type Usage = {
   sessionResetsAt?: string
   /** seven_day window, percent used */
   weekUsed?: number
+  weekResetsAt?: string
   /** context window fill, percent */
   contextUsed?: number
 }

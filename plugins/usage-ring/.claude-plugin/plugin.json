@@ -1,6 +1,6 @@
 {
   "name": "usage-ring",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "A band above the prompt for your limits, this chat's context, prompt cache and todos, and its token total and rate",
   "author": {
     "name": "Oualid0"

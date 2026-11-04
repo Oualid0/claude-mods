@@ -7,12 +7,12 @@ import type { TodoStatus, Todos, TokenLog, Usage } from '../types'
 /** Claude's terracotta: every ring, the frame and the titles. */
 export const TERRACOTTA = '#d97757'
 
-/** A red that sits next to the terracotta: rings from 90% on and a cache about to lapse. */
-export const ALERT = '#e5484d'
-/** A yellow that sits next to the terracotta and the red: a ring filling up, a cache running low. */
-export const WARN = '#e5b83c'
-/** A deeper red than ALERT: a ring at 100% (a limit used up, the compaction window full). */
-export const FULL = '#b3151b'
+/** A brick red from the terracotta's warm family: rings from 90% on and a cache about to lapse. */
+export const ALERT = '#d1503f'
+/** An ochre from the terracotta's warm family: a ring filling up, a cache running low. */
+export const WARN = '#e3a857'
+/** An oxblood, deeper than ALERT: a ring at 100% (a limit used up, the compaction window full). */
+export const FULL = '#9e2b25'
 /** The grey of a cache that holds nothing (cold). */
 export const GREY = '#8a8a8a'
 /** A muted terracotta for a value of 0: apart from the grey labels, quieter than the bright values. */
@@ -53,7 +53,7 @@ export type Segment = {
   textColor?: string
   /** The value is 0: it is drawn in the ZERO color (never a warning or alert color, which start well above 0). */
   isDim?: boolean
-  /** The time part of `text` (`4:54`); it keeps the base color when the ring turns red. */
+  /** The time part of `text` (`5d`, `4h`, `33m`); it keeps the base color when the ring turns red. */
   time?: string
   color: string
 }
@@ -72,6 +72,7 @@ export function usageFrom(
     sessionUsed: session?.percentUsed ?? previous.sessionUsed,
     sessionResetsAt: session ? session.resetsAt : previous.sessionResetsAt,
     weekUsed: week?.percentUsed ?? previous.weekUsed,
+    weekResetsAt: week ? week.resetsAt : previous.weekResetsAt,
     contextUsed: contextPercent,
   }
 }
@@ -95,14 +96,16 @@ export function contextFill(tokens: number | undefined, limit: number | undefine
   return (tokens / limit) * 100
 }
 
-/** A span as the band shows it: `4:50` (hours:minutes) from an hour up, `33m` below. */
+/** A span as the band shows it, in one unit and rounded down: `5d` from a day up, `4h` from an hour up, `33m` below. */
 export function duration(ms: number): string {
   const minutes = Math.max(0, Math.floor(ms / 60_000))
   if (minutes < 60) return `${minutes}m`
-  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  return `${Math.floor(hours / 24)}d`
 }
 
-/** Time left until `resetsAt` (`4:50`, `33m`); undefined when unknown or past. */
+/** Time left until `resetsAt` (`5d`, `4h`, `33m`); undefined when unknown or past. */
 export function remaining(resetsAt: string | undefined, now: number): string | undefined {
   if (!resetsAt) return undefined
   const ms = Date.parse(resetsAt) - now
@@ -115,10 +118,27 @@ function clamp(n: number | undefined): number | undefined {
   return n !== undefined && Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : undefined
 }
 
-/** The session window's length, shown once a window has run out and the next has not begun. */
-export const FRESH_WINDOW = '5:00'
+/** A window's length, shown once a window has run out and the next has not begun. */
+export const FRESH_WINDOW = { session: '5h', week: '7d' } as const
 
-/** Whether the session window ending at `resetsAt` is over. */
+/** A limit entry: the percent used and the time until the window resets. A window that ran out is empty and whole again until the next reading brings the new one: 0% and its full length. */
+function limitSegment(id: 'week' | 'session', percent: number, resetsAt: string | undefined, now: number): Segment {
+  const isOver = hasReset(resetsAt, now)
+  const used = isOver ? 0 : percent
+  const time = isOver ? FRESH_WINDOW[id] : remaining(resetsAt, now)
+  return {
+    id,
+    name: NAME[id], short: SHORT[id],
+    hasRing: true,
+    isDim: used === 0,
+    percent: used,
+    text: time ? `${used}% ${time}` : `${used}%`,
+    time,
+    color: ringColor(used, COLORS[id]),
+  }
+}
+
+/** Whether the limit window ending at `resetsAt` is over. */
 export function hasReset(resetsAt: string | undefined, now: number): boolean {
   if (!resetsAt) return false
   const at = Date.parse(resetsAt)
@@ -138,27 +158,9 @@ export function segments(usage: Usage, todos: Todos, now: number): Segment[] {
   const out: Segment[] = []
 
   const weekUsed = clamp(usage.weekUsed)
-  if (weekUsed !== undefined) {
-    out.push({ id: 'week', name: NAME.week, short: SHORT.week, hasRing: true, isDim: weekUsed === 0, percent: weekUsed, text: `${weekUsed}%`, color: ringColor(weekUsed, COLORS.week) })
-  }
+  if (weekUsed !== undefined) out.push(limitSegment('week', weekUsed, usage.weekResetsAt, now))
   const sessionUsed = clamp(usage.sessionUsed)
-  if (sessionUsed !== undefined) {
-    // A window that ran out is empty and whole again until the next reading
-    // brings the new one: 0% and its full five hours.
-    const isOver = hasReset(usage.sessionResetsAt, now)
-    const used = isOver ? 0 : sessionUsed
-    const time = isOver ? FRESH_WINDOW : remaining(usage.sessionResetsAt, now)
-    out.push({
-      id: 'session',
-      name: NAME.session, short: SHORT.session,
-      hasRing: true,
-      isDim: used === 0,
-      percent: used,
-      text: time ? `${used}% ${time}` : `${used}%`,
-      time,
-      color: ringColor(used, COLORS.session),
-    })
-  }
+  if (sessionUsed !== undefined) out.push(limitSegment('session', sessionUsed, usage.sessionResetsAt, now))
   const contextUsed = clamp(usage.contextUsed)
   if (contextUsed !== undefined) {
     out.push({ id: 'context', name: NAME.context, short: SHORT.context, hasRing: true, isDim: contextUsed === 0, percent: contextUsed, text: `${contextUsed}%`, color: ringColor(contextUsed, COLORS.context) })
@@ -434,7 +436,7 @@ export function fromTodoWrite(list: readonly { status: string }[]): Todos {
  * Only a window with a finite `usedPercent` counts, and one whose reset time
  * has already passed is stale; anything of another type is ignored.
  */
-export function fromSnapshot(raw: unknown, now: number): Pick<Usage, 'sessionUsed' | 'sessionResetsAt' | 'weekUsed'> {
+export function fromSnapshot(raw: unknown, now: number): Pick<Usage, 'sessionUsed' | 'sessionResetsAt' | 'weekUsed' | 'weekResetsAt'> {
   const object = (v: unknown): Record<string, unknown> | undefined =>
     typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : undefined
   const window = (v: unknown): { used: number; resetsAt?: string } | undefined => {
@@ -447,7 +449,7 @@ export function fromSnapshot(raw: unknown, now: number): Pick<Usage, 'sessionUse
   const file = object(raw)
   const session = window(file?.session)
   const week = window(file?.week)
-  return { sessionUsed: session?.used, sessionResetsAt: session?.resetsAt, weekUsed: week?.used }
+  return { sessionUsed: session?.used, sessionResetsAt: session?.resetsAt, weekUsed: week?.used, weekResetsAt: week?.resetsAt }
 }
 
 type Window = { usedPercent: number; resetsAt: string | null; status: null }

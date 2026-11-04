@@ -62,14 +62,16 @@ test('session.measure fills the rings (time until reset without session.start) a
     context: { window: 200000, tokens: 80000, percent: 40 },
     rateLimits: [
       { kind: 'five_hour', percentUsed: 48, resetsAt: '2026-10-03T15:20:00Z' },
-      { kind: 'seven_day', percentUsed: 23 },
+      { kind: 'seven_day', percentUsed: 23, resetsAt: '2026-10-08T23:00:00Z' },
     ],
     changed: ['context', 'rateLimits'],
   })
 
   const ui = await $.ui.mount(BAND)
   expect(await ui.find({ text: '48%' })).toBeDefined()
-  expect(await ui.find({ text: '2:20' })).toBeDefined()
+  expect(await ui.find({ text: '2h' })).toBeDefined()
+  // The week's time until reset, in days.
+  expect(await ui.find({ text: '5d' })).toBeDefined()
   expect(await ui.find({ text: '40%' })).toBeDefined()
   expect(await ui.find({ text: '23%' })).toBeDefined()
   expect(await ui.find({ text: 'below' })).toBeDefined()
@@ -214,7 +216,7 @@ test('the cache goes cold on a compaction or a model switch, not on an effort ch
   expect(await cold()).toBe(true)
   await step($, {})
   expect(await cold()).toBe(false)
-  expect(await (await $.ui.mount(BAND)).find({ text: '1:00' })).toBeDefined()
+  expect(await (await $.ui.mount(BAND)).find({ text: '1h' })).toBeDefined()
 })
 
 test('a new chat after /clear or a resume starts with no cache, total or rate', { options: { showTokens: true } }, async ($, on) => {
@@ -232,7 +234,7 @@ test('a new chat after /clear or a resume starts with no cache, total or rate', 
   await step($, { effort: 'medium' })
   let ui = await $.ui.mount(BAND)
   expect(await ui.find({ text: '4.6k' })).toBeDefined()
-  expect(await ui.find({ text: '1:00' })).toBeDefined()
+  expect(await ui.find({ text: '1h' })).toBeDefined()
   await $.session.end({ reason: 'clear', sessionId: 's' } as never)
   ui = await $.ui.mount(BAND)
   expect(await ui.find({ text: '4.6k' })).toBeUndefined()
@@ -550,9 +552,9 @@ test('the default band is one frame: rings for week, session and context, text f
   expect(await ui.find({ text: 'Todos' })).toBeDefined()
   expect(await ui.find({ text: '0/1' })).toBeDefined()
   expect(await ui.find({ text: 'Cache' })).toBeDefined()
-  // Hours without the h; the 5-hour window at 2:20 left.
-  expect(await ui.find({ text: '2:20' })).toBeDefined()
-  expect(await ui.find({ text: '1:00' })).toBeDefined()
+  // One unit, rounded down: the 5-hour window at 2:20 left shows 2h, the fresh cache 1h.
+  expect(await ui.find({ text: '2h' })).toBeDefined()
+  expect(await ui.find({ text: '1h' })).toBeDefined()
   // The groups are divided by a bar inside the one frame, and carry no titles.
   expect(await ui.find({ type: 'Text', text: ' │ ' })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: ' │ ' }))?.props.dimColor).toBe(true)
@@ -567,7 +569,7 @@ test('the default band is one frame: rings for week, session and context, text f
 test('the cache text takes the colors its ring had: normal, yellow, red, and red once cold', async ($, on) => {
   const clock = await warm($, on)
   const color = async (text: string) => (await (await $.ui.mount(BAND)).find({ type: 'Text', text }))?.props.color
-  expect(await color('1:00')).toBe(hot(CLAUDE))
+  expect(await color('1h')).toBe(hot(CLAUDE))
   await clock.advance(51 * 60_000)
   // Under 10 minutes of the hour left.
   expect(await color('9m')).toBe(hot(WARN))
@@ -815,7 +817,7 @@ test('a model switch names the cache lifetime: 5m and 1h are taken, an unknown o
   const text = async (t: string | RegExp) => (await (await $.ui.mount(BAND)).find({ type: 'Text', text: t })) !== undefined
 
   await step($, {})
-  expect(await text('1:00')).toBe(true)
+  expect(await text('1h')).toBe(true)
   // The engine says 5m on a switch: the cache is cold, and the next request counts down from 5 minutes.
   await $.classic.PostModelSwitch(switched({ cache_ttl: '5m' }))
   expect(await text('cold')).toBe(true)
@@ -830,5 +832,5 @@ test('a model switch names the cache lifetime: 5m and 1h are taken, an unknown o
   await $.classic.PostModelSwitch(switched({ cache_ttl: '1h', to_model: 'claude-sonnet-5-5', from_model: 'claude-sonnet-5-5' }))
   expect(await text('cold')).toBe(false)
   expect(await text('5m')).toBe(false)
-  expect(await text('1:00')).toBe(true)
+  expect(await text('1h')).toBe(true)
 })

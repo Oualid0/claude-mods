@@ -1,8 +1,22 @@
 # Changelog
 
 All notable changes to the mods in this repository. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). `usage-ring` is at 2.2.0,
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). `usage-ring` is at 2.3.0,
 `agent-board` at 2.0.0; earlier entries name the plugin version they belong to.
+
+## usage-ring 2.3.0 - 2026-11-04
+
+### Added
+
+- `Week` shows the time until the weekly limit resets (`5d`, `18h`, `33m`), like `Session`;
+  a week that ran out shows `0% 7d` until the next reading.
+
+### Changed
+
+- Times show one unit, rounded down: `5d` from a day up, `4h` from an hour up, `33m` below
+  (Session was `4:50`, a fresh window `5:00`, now `5h`; a fresh 1-hour cache `1h`).
+- The warning colors come from the terracotta's warm family: ochre (`#e3a857`) from 70%,
+  brick red (`#d1503f`) from 90%, oxblood (`#9e2b25`) at 100%, for the cache too.
 
 ## usage-ring 2.2.0 - 2026-11-03
 

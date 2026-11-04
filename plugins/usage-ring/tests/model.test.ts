@@ -13,12 +13,12 @@ test('session ring shows what is used and the time until reset', () => {
     {},
     NOW,
   )
-  expect(session).toMatchObject({ id: 'session', percent: 48, text: '48% 2:14' })
+  expect(session).toMatchObject({ id: 'session', percent: 48, text: '48% 2h' })
 })
 
 test('a session window that ran out shows 0% and the full five hours', () => {
   const [session] = segments({ sessionUsed: 99, sessionResetsAt: '2026-10-03T12:00:00Z' }, {}, NOW)
-  expect(session).toMatchObject({ id: 'session', percent: 0, text: '0% 5:00' })
+  expect(session).toMatchObject({ id: 'session', percent: 0, text: '0% 5h' })
 })
 
 test('rings come in the order week, session, context, todos', () => {
@@ -129,8 +129,8 @@ test('the band is one frame with its groups divided by a bar: its width counts t
   ]
   const extras = { total: 9200, rate: 9200 }
   const shown = fit(list, extras, 200, { tokens: true })!
-  // limits: "Week ◔ 23%" + "Session ◔ 48% 2:20"; chat: "Context ◔ 40%" + "Cache 59m" + "Todos 1/2"; tokens: "Tokens 9.2k  153 tok/s"
-  const limits = 'Week'.length + 1 + 2 + 1 + '23%'.length + GAP + 'Session'.length + 1 + 2 + 1 + '48% 2:20'.length
+  // limits: "Week ◔ 23%" + "Session ◔ 48% 2h"; chat: "Context ◔ 40%" + "Cache 59m" + "Todos 1/2"; tokens: "Tokens 9.2k  153 tok/s"
+  const limits = 'Week'.length + 1 + 2 + 1 + '23%'.length + GAP + 'Session'.length + 1 + 2 + 1 + '48% 2h'.length
   const chat = 'Context'.length + 1 + 2 + 1 + '40%'.length + GAP + 'Cache 59m'.length + GAP + 'Todos 1/2'.length
   const tokens = 'Tokens 9.2k'.length + GAP + '153 tok/s'.length
   expect(SEPARATOR).toBe(' │ ')
@@ -141,7 +141,7 @@ test('the band is one frame with its groups divided by a bar: its width counts t
   )
   // Short labels, the pixel Claude and the model label are added on top.
   const short = {
-    limits: 'Wk'.length + 1 + 2 + 1 + '23%'.length + GAP + 'Se'.length + 1 + 2 + 1 + '48% 2:20'.length,
+    limits: 'Wk'.length + 1 + 2 + 1 + '23%'.length + GAP + 'Se'.length + 1 + 2 + 1 + '48% 2h'.length,
     chat: 'Cx'.length + 1 + 2 + 1 + '40%'.length + GAP + 'Ca 59m'.length + GAP + 'Td 1/2'.length,
     tokens: 'Tk 9.2k'.length + GAP + '153 tok/s'.length,
   }
@@ -209,7 +209,7 @@ test('the rate counts the last 60 seconds and falls to 0 in a pause', () => {
 test('remaining time is undefined once the window has reset', () => {
   expect(remaining('2026-10-03T12:00:00Z', NOW)).toBeUndefined()
   expect(remaining('2026-10-03T13:05:00Z', NOW)).toBe('5m')
-  expect(remaining('2026-10-03T16:54:59Z', NOW)).toBe('3:54')
+  expect(remaining('2026-10-03T16:54:59Z', NOW)).toBe('3h')
 })
 
 test('deleted tasks leave the count, completed ones stay', () => {
@@ -276,9 +276,13 @@ test('the pixel Claude is 24 x 24 sprite pixels; hammer frames differ, z\'s appe
   expect(toBase64(claudePixels(0))).toBe(toBase64(claudePixels(2)))
 })
 
-test('times are H:MM from an hour up and minutes below', () => {
-  expect(duration(4 * 3_600_000 + 50 * 60_000)).toBe('4:50')
-  expect(duration(60 * 60_000)).toBe('1:00')
+test('times are one unit, rounded down: days from a day up, hours from an hour up, minutes below', () => {
+  expect(duration(5 * 86_400_000 + 23 * 3_600_000)).toBe('5d')
+  expect(duration(86_400_000)).toBe('1d')
+  expect(duration(86_400_000 - 60_000)).toBe('23h')
+  expect(duration(4 * 3_600_000 + 50 * 60_000)).toBe('4h')
+  expect(duration(60 * 60_000)).toBe('1h')
+  expect(duration(59 * 60_000 + 59_000)).toBe('59m')
   expect(duration(33 * 60_000 + 59_000)).toBe('33m')
   expect(duration(30_000)).toBe('0m')
 })
@@ -351,7 +355,7 @@ test('week, session and context turn yellow from 70%, red from 90%, deep red at 
 test('the cache ring drains from the lifetime, its yellow and red scaled to it', () => {
   const min = 60_000
   const c = { lastAt: 0, ttl: LONG_TTL }
-  expect(cacheSegment(c, 0)).toMatchObject({ percent: 100, text: '1:00' })
+  expect(cacheSegment(c, 0)).toMatchObject({ percent: 100, text: '1h' })
   expect(cacheSegment(c, 30 * min)).toMatchObject({ percent: 50, text: '30m' })
   const colorAt = (left: number) => cacheSegment(c, LONG_TTL - left * min).color
   expect(colorAt(10.5)).not.toBe(WARN)
@@ -389,7 +393,23 @@ test('a cold cache is an empty grey ring and a red cold: expired, switched model
 test('the session time stays out of the red', () => {
   const [session] = segments({ sessionUsed: 96, sessionResetsAt: '2026-10-03T15:14:30Z' }, {}, NOW)
   expect(session?.color).toBe(ALERT)
-  expect(session?.time).toBe('2:14')
+  expect(session?.time).toBe('2h')
+})
+
+test('the week ring shows what is used and the time until reset, in days, then hours and minutes', () => {
+  const week = (resetsAt: string, used = 42) => segments({ weekUsed: used, weekResetsAt: resetsAt }, {}, NOW)[0]
+  expect(week('2026-10-08T23:00:00Z')).toMatchObject({ id: 'week', percent: 42, text: '42% 5d', time: '5d' })
+  expect(week('2026-10-04T07:00:00Z')).toMatchObject({ text: '42% 18h', time: '18h' })
+  expect(week('2026-10-03T13:33:30Z')).toMatchObject({ text: '42% 33m', time: '33m' })
+  // A red week keeps its time in the base color, like the session.
+  expect(week('2026-10-05T00:00:00Z', 95)).toMatchObject({ color: ALERT, time: '1d' })
+  // Without a reset time only the percentage shows.
+  expect(segments({ weekUsed: 42 }, {}, NOW)[0]).toMatchObject({ text: '42%', time: undefined })
+})
+
+test('a week window that ran out shows 0% and the full seven days', () => {
+  const [week] = segments({ weekUsed: 99, weekResetsAt: '2026-10-03T12:00:00Z' }, {}, NOW)
+  expect(week).toMatchObject({ id: 'week', percent: 0, text: '0% 7d', isDim: true })
 })
 
 test('a displayed percentage is held to 0..100, and a figure that is not finite leaves its ring out', () => {
@@ -424,13 +444,13 @@ test('the limits file seeds the rings: types are checked and a window that alrea
     session: { usedPercent: 48, resetsAt: '2026-10-03T15:00:00Z', status: null },
     week: { usedPercent: 23, resetsAt: '2026-10-08T00:00:00Z', status: null },
   }
-  expect(fromSnapshot(file, NOW)).toEqual({ sessionUsed: 48, sessionResetsAt: '2026-10-03T15:00:00Z', weekUsed: 23 })
+  expect(fromSnapshot(file, NOW)).toEqual({ sessionUsed: 48, sessionResetsAt: '2026-10-03T15:00:00Z', weekUsed: 23, weekResetsAt: '2026-10-08T00:00:00Z' })
   // The session window is over; the week is still running.
-  expect(fromSnapshot(file, Date.parse('2026-10-04T00:00:00Z'))).toEqual({ sessionUsed: undefined, sessionResetsAt: undefined, weekUsed: 23 })
+  expect(fromSnapshot(file, Date.parse('2026-10-04T00:00:00Z'))).toEqual({ sessionUsed: undefined, sessionResetsAt: undefined, weekUsed: 23, weekResetsAt: '2026-10-08T00:00:00Z' })
   // A window without a reset time is taken as it is.
   expect(fromSnapshot({ week: { usedPercent: 5, resetsAt: null } }, NOW).weekUsed).toBe(5)
   // Wrong types and shapes seed nothing.
-  const none = { sessionUsed: undefined, sessionResetsAt: undefined, weekUsed: undefined }
+  const none = { sessionUsed: undefined, sessionResetsAt: undefined, weekUsed: undefined, weekResetsAt: undefined }
   expect(fromSnapshot({ session: { usedPercent: '48' }, week: { usedPercent: Number.NaN } }, NOW)).toEqual(none)
   expect(fromSnapshot({ session: { usedPercent: 48, resetsAt: 12 }, week: { usedPercent: 3, resetsAt: 'soon' } }, NOW)).toEqual(none)
   for (const raw of [null, 'x', 7, [], undefined]) expect(fromSnapshot(raw, NOW)).toEqual(none)
