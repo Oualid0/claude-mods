@@ -59,9 +59,9 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 | `Cache` (`Ca`) | chat | The prompt cache as text, no ring: the time left (`1h`, `33m`, in the last minute `45s`). With a 1-hour cache it turns yellow under 10 minutes and red under 3; with a 5-minute cache yellow under 2 minutes and red under 1. A red `cold` once the cache is gone: its lifetime ran out, the model was switched, or the chat was compacted (`/compact` or automatic). A change of effort does not count. The next request warms it again. `–` before the first request. |
 | `Todos` (`Td`) | chat | Todos done out of all, as plain text, e.g. `3/5`. Only while the chat has a todo list. In a muted terracotta (`#9a5a44`, not bold) while none is done (`0/5`). |
 | `Tokens` (`Tk`) | tokens | Only with the `showTokens` option; without it there is no `tokens` group and no such entry, and no `tokens` title even with `titles`. One entry with two figures, e.g. `Tokens 39.5M  6k tok/s`. The first is all tokens this chat used since the session started (input, output, cache reads and writes, subagents included); it grows after every model request. The second, after a gap of two spaces, is all tokens of the last minute per second, rounded, with the unit `tok/s` (`800 tok/s`, `6k tok/s`; `0 tok/s` in a pause). |
-| `Haiku` / `Sonnet` / `Opus` / `Other` (`Ha` / `So` / `Op` / `Ot`) | agents | Model family of the entry: Haiku, Sonnet, Opus, or `Other` only if a subagent's model fits none of them. The family is guessed from the model name. The label word is dimmed grey, like usage-ring's labels; the family colors are on the `Split` bar and the hats. The entry shows the running subagents, with a limit set as `running/limit` (e.g. `1/15`). The count is a muted terracotta (`#9a5a44`) with 0 running, in the chip color from 1 running, and red above the limit. Haiku, Sonnet and Opus always show once any subagent has started; with `hideUnused`, a family shows only once it had a subagent. |
+| `Haiku` / `Sonnet` / `Opus` / `Other` (`Ha` / `So` / `Op` / `Ot`) | agents | Model family of the entry: Haiku, Sonnet, Opus, or `Other` only if a subagent's model fits none of them. The family is guessed from the model name. The label word is dimmed grey, like usage-ring's labels; the family colors are on the `Split` bar and the hats. The entry shows the running subagents, with a limit set as `running/limit` (e.g. `1/15`). The count is a muted terracotta (`#9a5a44`) with 0 running, in terracotta from 1 running, and brick red above the limit. Haiku, Sonnet and Opus always show once any subagent has started; with `hideUnused`, a family shows only once it had a subagent. |
 | `✔` | agents | Subagents of that family not running in this chat (done, failed, stopped, or idle teammates), e.g. `✔3`, dimmed. Hidden while it would be `✔0`. |
-| `Split` (`Sp`) | agents | A bar of how this chat's tokens split by who used them: the main loop in terracotta, Haiku neon mint (`#39ff88`), Sonnet neon cyan (`#22d3ff`), Opus neon violet (`#b26bff`), Other grey (`#6a6a6a`). The same colors tint the family's hard hat in the crew (Haiku, Sonnet and Opus; Other has no crew member), not the label words. Every part with tokens gets at least one cell. It shows the split only; the total is in the `tokens` group of `usage-ring` (option `showTokens`). Empty until the first request. The word `Split` itself shows only with the `titles` option. |
+| `Split` (`Sp`) | agents | A bar of how this chat's tokens split by who used them: the main loop in terracotta, Haiku saffron, Sonnet orchid, Opus indigo, Other grey (see [Colors](#colors)). The same colors tint the family's hard hat in the crew (Haiku, Sonnet and Opus; Other has no crew member), not the label words. Every part with tokens gets at least one cell. It shows the split only; the total is in the `tokens` group of `usage-ring` (option `showTokens`). Empty until the first request. The word `Split` itself shows only with the `titles` option. |
 
 A value of 0 is shown in a fixed muted terracotta (`#9a5a44`, not bold) instead of the bright one: `0%` of Week, Session or Context, a Todos count with none done, a subagent count with 0 running, and, with `showTokens`, a total of 0 or a rate of `0 tok/s`. The labels stay grey and the `✔n` done counts stay dimmed. From above 0 a value has its normal color, and the yellow and red warning colors win. The `Cache` text has no zero case.
 
@@ -70,6 +70,24 @@ Labels are full words; the short form in brackets is used once the terminal is t
 When the terminal is narrower still, `usage-ring` drops the least important first: the model label, the group titles, then (only with `showTokens`) the rate part of `Tokens` and the whole `Tokens` entry (and with it the `tokens` group), `Ca`, `Td`, `Wk`, the pixel Claude, then `Cx`. `Se` stays longest (without a limit reading, whichever entry is left); if not even one entry fits, the band is hidden. Nothing is squeezed or wrapped.
 
 The `agents` row first shortens its labels, then drops, in this order: the titles `agents` and `Split`, the split bar, the `✔` counts, then the crew. If not even the counts fit, the row is hidden. It is also hidden when the band has fewer than 6 rows to draw in, to leave room for the prompt.
+
+## Colors
+
+Both mods share one palette built around Claude's terracotta; keep new UI colors to it. The pixel sprites (eyes, tools, boxes, the green done tick) have detail colors of their own.
+
+| Scheme | Color | Hex | Used for |
+|---|---|---|---|
+| Base | Terracotta | `#d97757` | Rings, values, frames, titles, the main loop on the `Split` bar, the pixel Claude and crew bodies |
+| Base | Muted terracotta | `#9a5a44` | A value of 0 |
+| Warm (warnings) | Ochre | `#e3a857` | Week, Session, Context from 70%; the cache running low |
+| Warm (warnings) | Brick red | `#d1503f` | Week, Session, Context from 90%; the cache about to lapse and `cold`; an agent count above its limit |
+| Warm (warnings) | Oxblood | `#9e2b25` | Week, Session, Context at 100% |
+| Orchid (agent families) | Saffron | `#f0c75e` | Haiku on the `Split` bar and its hat |
+| Orchid (agent families) | Orchid | `#c771c4` | Sonnet on the `Split` bar and its hat |
+| Orchid (agent families) | Indigo | `#7e66c2` | Opus on the `Split` bar and its hat |
+| Neutral | Grey | `#6a6a6a` | `Other` on the `Split` bar |
+
+Values, the rings' filled arcs and the sleeping z's use a lighter "hot" tone of their color (35% toward white); a ring's unfilled track is its plain color, dimmed.
 
 ## Limits
 

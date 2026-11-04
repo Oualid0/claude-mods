@@ -1,6 +1,6 @@
 {
   "name": "agent-board",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "A row above the prompt for the subagents Claude starts: running and done per model, a token bar, and a working pixel crew",
   "author": {
     "name": "Oualid0"

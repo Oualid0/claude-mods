@@ -2,7 +2,17 @@
 
 All notable changes to the mods in this repository. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). `usage-ring` is at 2.3.0,
-`agent-board` at 2.0.0; earlier entries name the plugin version they belong to.
+`agent-board` at 2.1.0; earlier entries name the plugin version they belong to.
+
+## agent-board 2.1.0 - 2026-11-04
+
+### Changed
+
+- The family colors follow the warm "Orchid" scheme instead of neon: Haiku saffron
+  (`#f0c75e`), Sonnet orchid (`#c771c4`), Opus indigo (`#7e66c2`), on the `Split` bar and
+  the hats.
+- A count above its limit is the brick red (`#d1503f`) that usage-ring uses.
+- The README lists the shared palette under "Colors".
 
 ## usage-ring 2.3.0 - 2026-11-04
 

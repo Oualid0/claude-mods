@@ -119,7 +119,7 @@ test('a count of zero has its own muted terracotta', () => {
 })
 
 test('the family colors', () => {
-  expect(COLOR).toMatchObject({ haiku: '#39ff88', sonnet: '#22d3ff', opus: '#b26bff', other: '#6a6a6a' })
+  expect(COLOR).toMatchObject({ haiku: '#f0c75e', sonnet: '#c771c4', opus: '#7e66c2', other: '#6a6a6a' })
 })
 
 test('every family wears its bar color as the hat', () => {

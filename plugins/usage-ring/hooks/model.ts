@@ -7,6 +7,7 @@ import type { TodoStatus, Todos, TokenLog, Usage } from '../types'
 /** Claude's terracotta: every ring, the frame and the titles. */
 export const TERRACOTTA = '#d97757'
 
+// The "Warm" warning scale (README → Colors): ochre, brick red, oxblood.
 /** A brick red from the terracotta's warm family: rings from 90% on and a cache about to lapse. */
 export const ALERT = '#d1503f'
 /** An ochre from the terracotta's warm family: a ring filling up, a cache running low. */

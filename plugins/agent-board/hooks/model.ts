@@ -2,7 +2,8 @@ import type { Agent, AgentState, Tier, Tokens } from '../types'
 import type { CrewState, CrewTier } from './workers'
 
 export const TERRACOTTA = '#d97757'
-export const ALERT = '#e5484d'
+/** Brick red from usage-ring's "Warm" scale (README → Colors): a count above its limit. */
+export const ALERT = '#d1503f'
 /** A count of zero running: terracotta muted, not bold, so it stands apart from the grey labels. */
 export const ZERO = '#9a5a44'
 
@@ -17,14 +18,16 @@ export const TIERS: readonly Tier[] = ['haiku', 'sonnet', 'opus', 'other']
 export const NAME: Record<Tier, string> = { haiku: 'Haiku', sonnet: 'Sonnet', opus: 'Opus', other: 'Other' }
 export const SHORT: Record<Tier, string> = { haiku: 'Ha', sonnet: 'So', opus: 'Op', other: 'Ot' }
 /**
- * Each family's neon color, for its label, its run of the token bar and its crew
- * member's hat; the main loop in Claude's own. `other` is a grey darker than the cold grey of usage-ring's cache.
+ * The "Orchid" family colors (README → Colors), for each family's run of the token bar
+ * and its crew member's hat; the main loop in Claude's own terracotta. Saffron, orchid
+ * and indigo sit clear of the terracotta and the reds. `other` is a grey
+ * darker than the cold grey of usage-ring's cache.
  */
 export const COLOR: Record<Tier | 'main', string> = {
   main: TERRACOTTA,
-  haiku: '#39ff88',
-  sonnet: '#22d3ff',
-  opus: '#b26bff',
+  haiku: '#f0c75e',
+  sonnet: '#c771c4',
+  opus: '#7e66c2',
   other: '#6a6a6a',
 }
 /** Cells of the token bar. */
