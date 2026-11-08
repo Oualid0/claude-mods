@@ -9,7 +9,8 @@ holds instructions only.
 - New mod = new folder under `plugins/` plus an entry in `.claude-plugin/marketplace.json`;
   the entry's name is the `name` in its `plugin.json`.
 - Before every commit: `claude plugin validate .`, and for each changed plugin
-  `claude plugin validate plugins/<name>` and `claude plugin test plugins/<name>`.
+  `claude plugin validate plugins/<name>` and `claude plugin test plugins/<name>`. The
+  pre-push hook (`.githooks/pre-push`, see README) runs the same checks on every push.
 - Bump `version` in the changed plugin's `plugin.json` for every change users should get
   (semver); users stay on their cached copy until it changes. Never set `version` in
   `marketplace.json` too.

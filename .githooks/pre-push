@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# Runs on every push (enabled per clone with core.hooksPath=.githooks). Scans the
+# commits the push sends for secrets, then runs the quick checks the pushed
+# plugins need: the manifests, and the tests of each changed plugin. The checks
+# run side by side and the whole hook has to stay under 30 seconds.
+set -euo pipefail
+
+ZERO_SHA=0000000000000000000000000000000000000000
+CHECK_TIMEOUT=120
+pushes=()
+
+say() {
+	printf 'pre-push: %s\n' "$@" >&2
+}
+
+while read -r _local_ref local_sha remote_ref remote_sha; do
+	[ -n "$local_sha" ] || continue
+	pushes+=("$local_sha $remote_ref $remote_sha")
+done
+
+# git runs this hook even when every ref is already up to date. Nothing will
+# reach the remote, so there is nothing to check.
+[ "${#pushes[@]}" -ne 0 ] || exit 0
+
+cd "$(git rev-parse --show-toplevel)"
+
+# The tips this push sends, one per line. Deletions carry nothing.
+pushed_tips() {
+	local local_sha push remote_ref remote_sha
+	for push in "${pushes[@]}"; do
+		read -r local_sha remote_ref remote_sha <<<"$push"
+		[ "$local_sha" = "$ZERO_SHA" ] || printf '%s\n' "$local_sha"
+	done | sort -u
+}
+
+# Every commit the push sends that no remote already has, so a credential added
+# in one commit and blanked in the next is still caught. -m makes gitleaks look
+# at merge commits too, which show no diff otherwise.
+scan_secrets() {
+	local tip
+	local -a tips
+	mapfile -t tips < <(pushed_tips)
+	[ "${#tips[@]}" -ne 0 ] || return 0
+
+	if ! command -v gitleaks >/dev/null 2>&1; then
+		say "gitleaks is not installed, skipping the secret scan of the pushed commits."
+		return 0
+	fi
+	for tip in "${tips[@]}"; do
+		if ! gitleaks git --log-opts="-m $tip --not --remotes" --redact --no-banner --log-level warn; then
+			say "gitleaks found secrets in the commits up to $tip." \
+				"Blank the value and rewrite the commit that added it."
+			return 1
+		fi
+	done
+}
+
+# The files this push changes on the remote, one per line. Returns 1 when a
+# pushed ref cannot be narrowed down (a tag, or a new branch without origin/main
+# to compare against). The caller then checks every plugin: "we could not work
+# it out" must never mean "skip it".
+pushed_files() {
+	local base local_sha push remote_ref remote_sha
+	for push in "${pushes[@]}"; do
+		read -r local_sha remote_ref remote_sha <<<"$push"
+		[ "$local_sha" != "$ZERO_SHA" ] || continue
+		[[ "$remote_ref" == refs/heads/* ]] || return 1
+
+		if [ "$remote_sha" != "$ZERO_SHA" ] && git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+			base=$remote_sha
+		elif ! base=$(git merge-base origin/main "$local_sha" 2>/dev/null); then
+			return 1
+		fi
+		git diff --name-only "$base" "$local_sha" || return 1
+	done
+}
+
+# Plugins with a changed file, one per line. A plugin folder that was deleted
+# has nothing left to check.
+changed_plugins() {
+	local name path
+	while IFS= read -r path; do
+		case "$path" in
+		plugins/*/*)
+			name=${path#plugins/}
+			name=${name%%/*}
+			if [ -d "plugins/$name" ]; then
+				printf '%s\n' "$name"
+			fi
+			;;
+		esac
+	done <<<"$changed" | sort -u
+}
+
+all_plugins() {
+	local dir
+	for dir in plugins/*/; do
+		[ -d "$dir" ] || continue
+		dir=${dir%/}
+		printf '%s\n' "${dir#plugins/}"
+	done
+}
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+scan_secrets
+
+changed=
+if changed=$(pushed_files); then
+	mapfile -t plugins < <(changed_plugins)
+else
+	say "the pushed range is open-ended (a tag, or a new branch without origin/main)." \
+		"Checking every plugin."
+	changed=
+	mapfile -t plugins < <(all_plugins)
+fi
+
+if ! command -v claude >/dev/null 2>&1; then
+	say "claude is not installed, so the plugin checks cannot run." \
+		"Install Claude Code, or push with git push --no-verify."
+	exit 1
+fi
+
+# Each check runs as its own background job, with its output printed in one
+# block once it finishes, so the jobs do not interleave. A passing check shows
+# only its last lines.
+names=()
+pids=()
+start_check() {
+	local name=$1 log
+	shift
+	log="$work/${#names[@]}.log"
+	names+=("$name")
+	(# Lowest priority, so a push never starves OBS or the audio graph.
+		renice -n 19 -p "$BASHPID" >/dev/null 2>&1 || true; ionice -c3 -p "$BASHPID" 2>/dev/null || true; timeout "$CHECK_TIMEOUT" "$@") </dev/null >"$log" 2>&1 &
+	pids+=("$!")
+}
+
+start_check "validate: marketplace" claude plugin validate .
+for plugin in "${plugins[@]}"; do
+	start_check "validate: $plugin" claude plugin validate "plugins/$plugin"
+	start_check "tests: $plugin" claude plugin test "plugins/$plugin"
+done
+
+if [ "${#names[@]}" -eq 1 ]; then
+	echo "checks: the pushed files touch no plugin, only the marketplace manifest"
+fi
+
+failed=0
+for i in "${!pids[@]}"; do
+	if wait "${pids[$i]}"; then
+		echo "--- ${names[$i]}: ok"
+		tail -n 3 "$work/$i.log"
+	else
+		echo "--- ${names[$i]}: FAILED"
+		cat "$work/$i.log"
+		failed=1
+	fi
+done
+exit "$failed"
